@@ -1,0 +1,21 @@
+{
+  "name": "visualize",
+  "private": true,
+  "packageManager": "pnpm@12.4.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter @visualize/web --filter @visualize/api dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "db:up": "docker compose up -d postgres",
+    "db:down": "docker compose down",
+    "db:generate": "pnpm --filter @visualize/db generate",
+    "db:migrate": "pnpm --filter @visualize/db migrate",
+    "db:studio": "pnpm --filter @visualize/db studio"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
+  }
+}
