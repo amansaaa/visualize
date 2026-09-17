@@ -5,3 +5,4 @@ export * from "./charts/usStates";
 export * from "./charts/spec";
 export * from "./sources";
 export * from "./visualization";
+export * from "./events";
