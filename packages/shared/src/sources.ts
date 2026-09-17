@@ -1,4 +1,10 @@
-// Zod schema + type for a citation (url, domain, title).
-// Not implemented yet.
+// A citation stored with every visualization.
+import { z } from "zod";
 
-export {};
+export const sourceSchema = z.object({
+  url: z.url(),
+  domain: z.string().min(1),
+  title: z.string().min(1),
+});
+
+export type Source = z.infer<typeof sourceSchema>;
