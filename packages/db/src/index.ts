@@ -1,4 +1,3 @@
 // Re-exports the db client and schema.
-// Not implemented yet.
-
-export {};
+export * from "./client.js";
+export * from "./schema.js";
