@@ -17,7 +17,10 @@ interface BarChartProps {
 }
 
 const THUMBNAIL_ROW_CAP = 8;
-const LABEL_COLUMN_WIDTH = 96;
+const LABEL_FONT_SIZE = 12;
+// Rough average glyph width for a 12px sans-serif; avoids clipping long
+// labels (e.g. "German Shepherd") without measuring text in the DOM.
+const CHAR_WIDTH_ESTIMATE = 7;
 const VALUE_COLUMN_WIDTH = 56;
 const ROW_PADDING = 0.35;
 
@@ -26,8 +29,14 @@ export function BarChart({ spec, mode = "thumbnail", width = 420, height = 320 }
   const rows = mode === "thumbnail" ? spec.rows.slice(0, THUMBNAIL_ROW_CAP) : spec.rows;
   const isTruncated = rows.length < spec.rows.length;
 
-  const plotLeft = LABEL_COLUMN_WIDTH;
-  const plotWidth = Math.max(width - LABEL_COLUMN_WIDTH - VALUE_COLUMN_WIDTH, 0);
+  const longestLabelLength = Math.max(...rows.map((row) => row.label.length), 1);
+  const labelColumnWidth = Math.min(
+    Math.max(longestLabelLength * CHAR_WIDTH_ESTIMATE + 16, 48),
+    width * 0.42,
+  );
+
+  const plotLeft = labelColumnWidth;
+  const plotWidth = Math.max(width - labelColumnWidth - VALUE_COLUMN_WIDTH, 0);
 
   const yScale = scaleBand<string>({
     domain: rows.map((row) => row.label),
@@ -67,7 +76,7 @@ export function BarChart({ spec, mode = "thumbnail", width = 420, height = 320 }
                 y={barHeight / 2}
                 dy="0.35em"
                 textAnchor="end"
-                fontSize={12}
+                fontSize={LABEL_FONT_SIZE}
                 fontWeight={isHighlighted ? 600 : 500}
                 fill={theme.ink}
               >
@@ -77,7 +86,7 @@ export function BarChart({ spec, mode = "thumbnail", width = 420, height = 320 }
                 x={barWidth + 10}
                 y={barHeight / 2}
                 dy="0.35em"
-                fontSize={12}
+                fontSize={LABEL_FONT_SIZE}
                 fontWeight={600}
                 fill={theme.ink}
               >
