@@ -20,3 +20,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm build
+        env:
+          # next build imports page modules, which import the DB client. It only connects on the first
+          # query, and no query runs at build time, so a placeholder is enough.
+          DATABASE_URL: postgres://placeholder:placeholder@localhost:5432/placeholder
