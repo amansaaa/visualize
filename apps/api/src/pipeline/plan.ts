@@ -1,5 +1,6 @@
 /**
- * 1. Hidden step that orchestrates whether SEARCH is needed (i.e is it a follow-up?) and loads its parent
+ * 1. Hidden step that loads the parent (if this is a follow-up) and decides whether SEARCH is needed
+ *    (being a follow-up doesn't automatically mean no; a follow-up can still need fresh data)
  * 2. Writes the targeted search queries based off the user's input
  */
 import { db, visualizations } from "@visualize/db";
@@ -23,7 +24,7 @@ const freshQueriesSchema = z.object({
   queries: z.array(z.string().min(1)).min(2).max(3),
 });
 
-// For brand new questions with no parent
+// For brand new questions with no parent, and as the fallback when a given parentId is stale
 async function planFreshQueries(prompt: string, signal: AbortSignal): Promise<PlanContext> {
   const { object } = await generateObject({
     model: getModel(),
@@ -39,7 +40,7 @@ const followUpPlanSchema = z.object({
   queries: z.array(z.string().min(1)).max(3),
 });
 
-// Called once per request (orchestrator)
+// Called once per request, by the orchestrator (runPipeline in pipeline/index.ts)
 export async function plan(
   input: { prompt: string; parentId?: string },
   signal: AbortSignal,
