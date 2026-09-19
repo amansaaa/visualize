@@ -32,8 +32,10 @@ export async function searchTavily(query: string, signal: AbortSignal): Promise<
 
   // Promise.race resolves/rejects with whichever promise finishes first
   // (i.e user disconnects -> cancel OR we hit the maximum results)
+  // includeRawContent asks Tavily for the full page text; the default `content` is only a
+  // ~500-1300 character snippet, too short to hold a table of 8 countries or 51 states
   const response = await Promise.race([
-    client.search(query, { maxResults: 5 }),
+    client.search(query, { maxResults: 5, includeRawContent: "text" }),
     abortPromise(signal),
   ]);
 
@@ -42,6 +44,7 @@ export async function searchTavily(query: string, signal: AbortSignal): Promise<
     domain: new URL(result.url).hostname,
     title: result.title,
     url: result.url,
-    content: result.content,
+    // Some pages can't be scraped, so fall back to the snippet when there's no raw text
+    content: result.rawContent || result.content,
   }));
 }

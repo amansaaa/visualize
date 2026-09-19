@@ -21,20 +21,22 @@ const consolidateOutputSchema = z.object({
   rows: z.array(dataRowSchema).min(1),
 });
 
+// Per-page cap on text sent to the LLM. Tavily now returns full page text (roughly 4K-65K
+// characters per page), so without a cap several pages could flood the model's context.
+const MAX_SOURCE_CHARS = 8000;
+
 // Builds a prompt containing user's question and instructions on formatting the data from the sources
 async function extractRows(
   prompt: string,
   scraped: SearchStepResult["scraped"],
   signal: AbortSignal,
 ): Promise<DataRow[]> {
-  const sourceText = scraped
-    /** Truncate each web page to 2000 characters (arbitrary) 
-     * Some webpages may have over 10K characters and with X many web pages 
-     * may explode the context window of the LLM
-     * Hence, an rough approximation of 2000 characters (may need to change though)
-    */
-    .flatMap((s) => s.results)
-    .map((r) => `### ${r.title} (${r.url})\n${r.content.slice(0, 2000)}`)
+  // The same page can come back for more than one query; send its text only once
+  const uniqueResults = [
+    ...new Map(scraped.flatMap((s) => s.results).map((r) => [r.url, r] as const)).values(),
+  ];
+  const sourceText = uniqueResults
+    .map((r) => `### ${r.title} (${r.url})\n${r.content.slice(0, MAX_SOURCE_CHARS)}`)
     .join("\n\n");
 
   const { object } = await generateObject({
