@@ -9,6 +9,7 @@
     "dev": "pnpm --parallel --filter @visualize/web --filter @visualize/api dev",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
+    "seed": "pnpm --filter @visualize/api seed",
     "db:up": "docker compose up -d postgres",
     "db:down": "docker compose down",
     "db:generate": "pnpm --filter @visualize/db generate",

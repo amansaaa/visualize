@@ -248,6 +248,9 @@ importers:
       d3-shape:
         specifier: ^3.2.0
         version: 3.2.0
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(postgres@3.4.9)
       next:
         specifier: 16.3.5
         version: 16.3.5(@types/node@24.13.5)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
