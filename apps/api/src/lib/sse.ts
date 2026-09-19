@@ -1,7 +1,7 @@
 // Helper that turns a normal Express response into an event stream and aborts on client disconnect.
 // Client reads a SSE stream over a POST (file formats and sends those bytes, and detects when client disconnects)
 import type { StreamEvent } from "@visualize/shared";
-import type { Request, Response } from "express";
+import type { Response } from "express";
 
 /**
  * send: push one event (type: StreamEvent that we defined before)
@@ -15,7 +15,7 @@ export interface EventStream {
 }
 
 // Called once per /generate request
-export function openEventStream(req: Request, res: Response): EventStream {
+export function openEventStream(res: Response): EventStream {
   /** Sets the three headers SSE requires 
    * text/event-stream: tells browser its a stream and not a normal response
    * no-cache: browsers/proxies shouldn't cache a live stream
@@ -30,7 +30,12 @@ export function openEventStream(req: Request, res: Response): EventStream {
   res.flushHeaders();
 
   const controller = new AbortController();
-  req.on("close", () => controller.abort());
+  // Listen on res, not req: in modern Node, req 'close' fires as soon as the request body is read
+  // (before this listener is attached), so it never signals a disconnect. res 'close' with
+  // writableFinished=false means the client left before we finished writing.
+  res.on("close", () => {
+    if (!res.writableFinished) controller.abort();
+  });
 
   function send(event: StreamEvent): void {
     if (controller.signal.aborted || res.writableEnded) return;

@@ -25,7 +25,7 @@ generateRouter.post("/", limiter, async (req, res) => {
     return;
   }
 
-  const stream = openEventStream(req, res);
+  const stream = openEventStream(res);
   try {
     await runPipeline(parsed.data, stream.send, stream.signal);
   } finally {
