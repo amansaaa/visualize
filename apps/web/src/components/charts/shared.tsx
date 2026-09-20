@@ -1,4 +1,5 @@
 // Bits every chart component shares: prop shape, micro label, thumbnail fade.
+import { inter } from "@/lib/fonts";
 import type { ChartTheme } from "@/lib/themes";
 
 export type ChartMode = "thumbnail" | "full";
@@ -84,6 +85,10 @@ export function readableInk(fill: string, theme: ChartTheme): string {
     : theme.background;
 }
 
-/** Font stack matching the mockups' sans-serif. Applied on the root <svg>. */
-export const CHART_FONT_FAMILY =
-  'ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif';
+/**
+ * Font stack matching the page chrome. Applied on the root <svg>. Uses the
+ * resolved next/font family rather than the `--font-sans` CSS variable because
+ * `font-family` on an <svg> is a presentation attribute, and presentation
+ * attributes do not resolve `var()`.
+ */
+export const CHART_FONT_FAMILY = `${inter.style.fontFamily}, ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`;
