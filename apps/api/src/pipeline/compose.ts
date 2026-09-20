@@ -29,7 +29,8 @@ const composeOutputSchema = z.object({
 // What the LLM is told about each chart type and number format. Keep in sync with
 // packages/shared/src/charts/spec.ts and apps/web/src/lib/format.ts.
 const CHART_GUIDE = `
-Pick the chart type that fits the shape of the data. Bar suits plain rankings, but not time series, parts of a whole, or per-state data.
+If the question explicitly asks for a chart type, color, theme or highlight (e.g. a follow-up like "make it a donut chart"), do exactly that. It overrides everything below, as long as the data allows it.
+Otherwise, pick the chart type that fits the shape of the data. Bar suits plain rankings, but not time series, parts of a whole, or per-state data.
 - bar: categories ranked by one value. Set showRank for "top N" lists.
 - lollipop: a ranking of ratios or scores rather than totals. Optional referenceLine for a benchmark.
 - column: one value across time (years or months), at least 2 periods. Each label is a period.
@@ -82,11 +83,13 @@ async function attemptCompose(
     abortSignal: signal,
     prompt: [
       `Question: "${prompt}"`,
-      priorSpec ? `Current chart type: ${priorSpec.type}` : null,
       CHART_GUIDE,
       "Data rows:",
       JSON.stringify(rows),
-      "Pick the chart type and theme that best fit this data, and write a title and description.",
+      // The last instruction is the one the model weighs most, so a follow-up's differs from a first run's
+      priorSpec
+        ? `This is a follow-up. Keep the current chart type (${priorSpec.type}) unless the question asks for a different one, and change only what the question asks for. Write a title and description.`
+        : "Pick the chart type and theme that best fit this data, and write a title and description.",
       hint ? `Your last choice didn't work: ${hint}. Pick a different chart type this time.` : null,
     ]
       .filter((line) => line !== null)
