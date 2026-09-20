@@ -2,7 +2,7 @@
 // runCompose (manager) and attemptCompose (worker) logic (similar to consolidate.ts logic for extractRows()
 import {
   chartSpecSchema,
-  US_STATE_CODES,
+  US_STATES,
   type ChartSpec,
   type ChartType,
   type DataRow,
@@ -26,6 +26,31 @@ const composeOutputSchema = z.object({
   spec: chartSpecSchema,
 });
 
+// What the LLM is told about each chart type and number format. Keep in sync with
+// packages/shared/src/charts/spec.ts and apps/web/src/lib/format.ts.
+const CHART_GUIDE = `
+Pick the chart type that fits the shape of the data. Bar suits plain rankings, but not time series, parts of a whole, or per-state data.
+- bar: categories ranked by one value. Set showRank for "top N" lists.
+- lollipop: a ranking of ratios or scores rather than totals. Optional referenceLine for a benchmark.
+- column: one value across time (years or months), at least 2 periods. Each label is a period.
+- line: trends over time; use it for many periods or several series (up to 4).
+- donut: parts of a whole, ONLY when the data has 6 or fewer categories.
+- treemap: parts of a whole with many categories (7 or more). Values must be positive.
+- usMap: one value per US state. Use 2-letter USPS codes (convert names, e.g. California to CA) and drop non-state rows.
+- dotCompare: 2 to 4 measurements per item (e.g. men vs women per country). Each row gets one value per series name.
+
+valueFormat controls how numbers print. Use the raw numbers from the data and never rescale them.
+- compact: counts, quantities and ratios (1.4B, 107,941, 14.1).
+- currency: US dollar amounts.
+- percent: the number is already a percentage (21.2 prints as 21.2%).
+- duration: ONLY lengths of time measured in minutes (148 prints as 2h 28m). Never for years, ages or life expectancy.
+
+Highlight the single most notable item (the top or the peak), or omit highlight. Pick a theme that suits the topic.
+Title: a short editorial headline. Description: one or two sentences on what the chart shows, with units and time period.
+`.trim();
+
+const STATE_NAMES_AND_CODES = new Set<string>(US_STATES.flatMap((s) => [s.code, s.name]));
+
 // Catches chart-type/data mismatches Zod's schema can't express on its own.
 // Returns a short reason string when unsuitable, or null when the choice is fine.
 function checkChartTypeFits(type: ChartType, rows: DataRow[]): string | null {
@@ -33,11 +58,11 @@ function checkChartTypeFits(type: ChartType, rows: DataRow[]): string | null {
     return "donut charts only fit six or fewer categories";
   }
   if (type === "usMap") {
-    const stateCodes = new Set<string>(US_STATE_CODES);
-    const looksLikeStates = rows.every((row) =>
-      Object.values(row).some((value) => typeof value === "string" && stateCodes.has(value)),
+    // Rows may hold a state name or a code, and a stray non-state row (e.g. "Federal") is tolerated
+    const stateRows = rows.filter((row) =>
+      Object.values(row).some((value) => typeof value === "string" && STATE_NAMES_AND_CODES.has(value)),
     );
-    if (!looksLikeStates) return "usMap requires every row to key by a US state code";
+    if (stateRows.length < rows.length * 0.8) return "usMap needs data where each row is a US state";
   }
   return null;
 }
@@ -58,6 +83,7 @@ async function attemptCompose(
     prompt: [
       `Question: "${prompt}"`,
       priorSpec ? `Current chart type: ${priorSpec.type}` : null,
+      CHART_GUIDE,
       "Data rows:",
       JSON.stringify(rows),
       "Pick the chart type and theme that best fit this data, and write a title and description.",
