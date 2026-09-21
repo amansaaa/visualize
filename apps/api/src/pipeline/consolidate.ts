@@ -65,17 +65,23 @@ function dedupeSources(results: TavilySearchResult[]): Source[] {
   return [...byUrl.values()];
 }
 
+// Only fields whose NAME says they hold a date. Scanning every value instead
+// misreads ordinary numbers that happen to land in the year range — "1,520
+// million speakers" once printed as the date range "1520".
+const DATE_FIELD = /(^|_)(year|years|date|dates|period|season)($|_)/i;
+
 // Fills the "date range" slot in CONSOLIDATE's summary line (rows/sources/date range).
-// Scans row values for year-like numbers; returns null when the data isn't time-based.
+// Returns null when the data isn't time-based, which is the common case.
 function computeDateRange(rows: DataRow[]): string | null {
   const years: number[] = [];
   for (const row of rows) {
-    for (const value of Object.values(row)) {
-      if (typeof value === "number" && value >= 1500 && value <= 2100) {
-        years.push(value);
-      } else if (typeof value === "string" && /^\d{4}$/.test(value)) {
-        years.push(Number(value));
-      }
+    for (const [field, value] of Object.entries(row)) {
+      if (!DATE_FIELD.test(field)) continue;
+      // A date field can still hold a full date ("2024-03-01"), so read the
+      // leading 4-digit year out of strings rather than requiring the whole
+      // value to be one.
+      const year = typeof value === "number" ? value : Number(String(value ?? "").slice(0, 4));
+      if (Number.isInteger(year) && year >= 1500 && year <= 2100) years.push(year);
     }
   }
   if (years.length === 0) return null;
