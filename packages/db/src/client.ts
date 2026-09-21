@@ -10,8 +10,12 @@ if (!connectionString) {
   throw new Error("DATABASE_URL is not set");
 }
 
-// Client function that connects to a Postgres server running 
-const client = postgres(connectionString);
+// On Cloud Run, Cloud SQL is reached through a unix socket directory (/cloudsql/PROJECT:REGION:INSTANCE)
+// rather than a host, which a connection URL can't express, so it's passed as an option instead.
+const socketPath = process.env.DB_SOCKET_PATH;
+
+// Client function that connects to a Postgres server running
+const client = postgres(connectionString, socketPath ? { host: socketPath } : {});
 
 // Wrap instance around drizzle to get simple SQL queries and type safety
 export const db = drizzle(client);

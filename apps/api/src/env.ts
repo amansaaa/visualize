@@ -6,6 +6,8 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
+  // Cloud Run sets PORT; locally the shared .env uses API_PORT because a shared PORT would also move Next.
+  PORT: z.coerce.number().int().positive().optional(),
   API_PORT: z.coerce.number().int().positive().default(4000),
   WEB_ORIGIN: z.url(),
   GOOGLE_GENERATIVE_AI_API_KEY: z.string().min(1),

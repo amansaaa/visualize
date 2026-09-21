@@ -1,9 +1,11 @@
-// COMPOSE step: LLM picks chart type/theme and writes title, description, spec; code validates the choice.
+// COMPOSE step: LLM picks chart type and writes title, description, spec; code picks the theme and validates the choice.
 // runCompose (manager) and attemptCompose (worker) logic (similar to consolidate.ts logic for extractRows()
 import {
   chartSpecSchema,
+  THEME_NAMES,
   US_STATES,
   type ChartSpec,
+  type ThemeName,
   type ChartType,
   type DataRow,
   type Source,
@@ -46,9 +48,14 @@ valueFormat controls how numbers print. Use the raw numbers from the data and ne
 - percent: the number is already a percentage (21.2 prints as 21.2%).
 - duration: ONLY lengths of time measured in minutes (148 prints as 2h 28m). Never for years, ages or life expectancy.
 
-Highlight the single most notable item (the top or the peak), or omit highlight. Pick a theme that suits the topic.
+Highlight the single most notable item (the top or the peak), or omit highlight.
 Title: a short editorial headline. Description: one or two sentences on what the chart shows, with units and time period.
 `.trim();
+
+// Theme is chosen by code, not the LLM: left to itself the model picked blue for over half of all charts.
+function randomTheme(): ThemeName {
+  return THEME_NAMES[Math.floor(Math.random() * THEME_NAMES.length)]!;
+}
 
 const STATE_NAMES_AND_CODES = new Set<string>(US_STATES.flatMap((s) => [s.code, s.name]));
 
@@ -74,6 +81,7 @@ async function attemptCompose(
   prompt: string,
   rows: DataRow[],
   priorSpec: ChartSpec | null,
+  theme: ThemeName,
   hint: string | undefined,
   signal: AbortSignal,
 ): Promise<ComposeResult> {
@@ -84,12 +92,13 @@ async function attemptCompose(
     prompt: [
       `Question: "${prompt}"`,
       CHART_GUIDE,
+      `Theme: use "${theme}" unless the question explicitly asks for a different color or theme, in which case pick the closest match.`,
       "Data rows:",
       JSON.stringify(rows),
       // The last instruction is the one the model weighs most, so a follow-up's differs from a first run's
       priorSpec
         ? `This is a follow-up. Keep the current chart type (${priorSpec.type}) unless the question asks for a different one, and change only what the question asks for. Write a title and description.`
-        : "Pick the chart type and theme that best fit this data, and write a title and description.",
+        : "Pick the chart type that best fits this data, and write a title and description.",
       hint ? `Your last choice didn't work: ${hint}. Pick a different chart type this time.` : null,
     ]
       .filter((line) => line !== null)
@@ -101,7 +110,7 @@ async function attemptCompose(
 
 // Builds a plain bar spec directly in code, no LLM call, so the run always finishes with something to show.
 // Default to bar for fallback as the safe choice as its schema has the least constraints (packages/shared/src/charts/spec.ts for barChartSpecSchema)
-function fallbackToBar(rows: DataRow[], title: string, description: string): ComposeResult {
+function fallbackToBar(rows: DataRow[], title: string, description: string, theme: ThemeName): ComposeResult {
   const [firstRow] = rows;
   const numericField = firstRow && Object.entries(firstRow).find(([, v]) => typeof v === "number")?.[0];
   const labelField = firstRow && Object.keys(firstRow).find((key) => key !== numericField);
@@ -116,7 +125,7 @@ function fallbackToBar(rows: DataRow[], title: string, description: string): Com
     description,
     spec: {
       type: "bar",
-      theme: "near-black",
+      theme,
       valueFormat: "compact",
       rows: barRows,
     },
@@ -141,23 +150,25 @@ export async function runCompose(
   // checkChartTypeFits rejects a spec that is valid but wrong for this data.
   let attempt: ComposeResult;
   let retried = false;
+  // Fixed across retries; a follow-up keeps the chart's current theme.
+  const theme = priorSpec?.theme ?? randomTheme();
 
   try {
-    attempt = await attemptCompose(prompt, rows, priorSpec, undefined, signal);
+    attempt = await attemptCompose(prompt, rows, priorSpec, theme, undefined, signal);
   } catch {
     // A second schema failure propagates: the orchestrator turns it into an
     // error event and saves nothing ("validation fails twice" in CLAUDE.md).
-    attempt = await attemptCompose(prompt, rows, priorSpec, "that chart spec was not valid", signal);
+    attempt = await attemptCompose(prompt, rows, priorSpec, theme, "that chart spec was not valid", signal);
     retried = true;
   }
 
   let reason = checkChartTypeFits(attempt.spec.type, rows);
   if (reason && !retried) {
-    attempt = await attemptCompose(prompt, rows, priorSpec, reason, signal);
+    attempt = await attemptCompose(prompt, rows, priorSpec, theme, reason, signal);
     reason = checkChartTypeFits(attempt.spec.type, rows);
   }
 
-  const result = reason ? fallbackToBar(rows, attempt.title, attempt.description) : attempt;
+  const result = reason ? fallbackToBar(rows, attempt.title, attempt.description, attempt.spec.theme) : attempt;
 
   emit({
     type: "compose",

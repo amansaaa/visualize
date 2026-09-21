@@ -24,6 +24,7 @@ app.use(express.json());
 
 app.use("/generate", generateRouter);
 
-app.listen(env.API_PORT, () => {
-  console.log(`apps/api listening on port ${env.API_PORT}`);
+const port = env.PORT ?? env.API_PORT;
+app.listen(port, () => {
+  console.log(`apps/api listening on port ${port}`);
 });

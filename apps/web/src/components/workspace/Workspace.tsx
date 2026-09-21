@@ -20,6 +20,13 @@ const MAX_SOURCES = 2;
 /** Breathing room between the right panel's edges and the chart's own box. */
 const CHART_INSET = 32;
 
+/** StreamingModal's box, mirrored here so the chart can grow out of it. */
+const MODAL_MAX_WIDTH = 640;
+const MODAL_HEIGHT = 660;
+const MODAL_MARGIN = { x: 20, y: 32 };
+const EXPAND_MS = 700;
+const EXPAND_EASING = "cubic-bezier(0.22, 1, 0.36, 1)";
+
 function ChevronDown() {
   return (
     <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden fill="none">
@@ -128,9 +135,23 @@ interface WorkspaceProps {
   onFollowUp: (prompt: string) => void;
 }
 
+interface SplitWorkspaceProps extends WorkspaceProps {
+  /** True when this mounted in place of the streaming modal: play the expand-out. */
+  expandFromModal: boolean;
+}
+
 export function Workspace(props: WorkspaceProps) {
+  // Only a workspace that grew out of the streaming modal gets the expand
+  // animation; one reopened from the session tray mounts already complete.
+  const [wasStreaming, setWasStreaming] = useState(!props.chart);
+  if (!props.chart && !wasStreaming) setWasStreaming(true);
+
   // The chart's arrival is what turns the streaming modal into the workspace.
-  return props.chart ? <SplitWorkspace {...props} /> : <StreamingModal {...props} />;
+  return props.chart ? (
+    <SplitWorkspace {...props} expandFromModal={wasStreaming} />
+  ) : (
+    <StreamingModal {...props} />
+  );
 }
 
 function StreamingModal({ run, prompt, onCancel, onCollapse }: WorkspaceProps) {
@@ -183,8 +204,13 @@ function SplitWorkspace({
   onCancel,
   onCollapse,
   onFollowUp,
-}: WorkspaceProps) {
+  expandFromModal,
+}: SplitWorkspaceProps) {
   const scrollRef = useAutoScroll(run);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const chartPanelRef = useRef<HTMLElement>(null);
+  const controlsRef = useRef<HTMLDivElement>(null);
   const chartBoxRef = useRef<HTMLDivElement>(null);
   const [chartBox, setChartBox] = useState<{ width: number; height: number } | null>(null);
 
@@ -205,14 +231,65 @@ function SplitWorkspace({
     return () => observer.disconnect();
   }, []);
 
+  // The streaming modal is replaced by this layout in one render. To make that
+  // read as the modal opening up, the chart panel is revealed through a
+  // clip-path that starts at the modal's box and grows to the panel's full
+  // size. Clipping (rather than scaling) means the chart is laid out at its
+  // final size throughout, so nothing stretches. Runs before first paint.
+  useLayoutEffect(() => {
+    const root = rootRef.current;
+    const panel = panelRef.current;
+    const chartPanel = chartPanelRef.current;
+    const controls = controlsRef.current;
+    if (!expandFromModal || !root || !panel || !chartPanel || !controls) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const rect = chartPanel.getBoundingClientRect();
+    const modalWidth = Math.min(MODAL_MAX_WIDTH, window.innerWidth - MODAL_MARGIN.x * 2);
+    const modalHeight = Math.min(MODAL_HEIGHT, window.innerHeight - MODAL_MARGIN.y * 2);
+    const modalLeft = (window.innerWidth - modalWidth) / 2;
+    const modalTop = (window.innerHeight - modalHeight) / 2;
+
+    const inset = (value: number) => Math.max(0, Math.round(value));
+    const from = `inset(${inset(modalTop - rect.top)}px ${inset(rect.right - (modalLeft + modalWidth))}px ${inset(
+      rect.bottom - (modalTop + modalHeight),
+    )}px ${inset(modalLeft - rect.left)}px round 14px)`;
+
+    const timing = { duration: EXPAND_MS, easing: EXPAND_EASING };
+    const fadeIn = { duration: 450, easing: "ease-out", delay: 250, fill: "backwards" as const };
+
+    // Scrim -> page: the modal's blurred backdrop dissolves into the solid page.
+    const finalBackground = getComputedStyle(root).backgroundColor;
+    const animations = [
+      root.animate(
+        [
+          { backgroundColor: "rgba(0, 0, 0, 0.7)", backdropFilter: "blur(40px)" },
+          { backgroundColor: finalBackground, backdropFilter: "blur(40px)" },
+        ],
+        timing,
+      ),
+      chartPanel.animate([{ clipPath: from }, { clipPath: "inset(0px round 12px)" }], timing),
+      panel.animate(
+        [
+          { opacity: 0, transform: "translateX(-16px)" },
+          { opacity: 1, transform: "none" },
+        ],
+        fadeIn,
+      ),
+      controls.animate([{ opacity: 0 }, { opacity: 1 }], fadeIn),
+    ];
+    return () => animations.forEach((animation) => animation.cancel());
+    // Only the first paint after mounting animates.
+  }, []);
+
   const composed = chart!;
   const theme = themes[composed.spec.theme];
   const sources = composed.sources;
   const running = run.status === "running";
 
   return (
-    <div className="bg-page fixed inset-0 z-50 flex gap-2 p-4">
-      <aside className="bg-panel flex w-[370px] shrink-0 flex-col overflow-hidden rounded-xl">
+    <div ref={rootRef} className="bg-page fixed inset-0 z-50 flex gap-2 p-4">
+      <aside ref={panelRef} className="bg-panel flex w-[370px] shrink-0 flex-col overflow-hidden rounded-xl">
         <h2 className="text-ink shrink-0 px-8 pt-8 pb-5 text-[19px] leading-[1.3]">{prompt}</h2>
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-8">
@@ -249,6 +326,7 @@ function SplitWorkspace({
       </aside>
 
       <section
+        ref={chartPanelRef}
         className="relative min-w-0 flex-1 overflow-hidden rounded-xl"
         style={{ backgroundColor: theme.background }}
       >
@@ -265,7 +343,7 @@ function SplitWorkspace({
           ) : null}
         </div>
 
-        <div className="absolute top-5 right-5 flex items-center gap-2">
+        <div ref={controlsRef} className="absolute top-5 right-5 flex items-center gap-2">
           {publishError ? (
             <span className="text-[12px] text-[#e0614a]">{publishError}</span>
           ) : null}
