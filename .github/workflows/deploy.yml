@@ -1,6 +1,11 @@
 name: Deploy
 
 on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "design/**"
   workflow_dispatch:
 
 # Least privilege for the token GitHub gives this run.
