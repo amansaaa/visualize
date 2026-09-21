@@ -1,0 +1,72 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# Least privilege for the token GitHub gives this run.
+# id-token: write lets the run ask GitHub for the signed identity token Google verifies.
+permissions:
+  contents: read
+  id-token: write
+
+# Only one deploy at a time; a second waits for the first to finish.
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+# The image repo path
+env:
+  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/visualize
+
+jobs:
+  deploy-api:
+    # Refuse to run from any branch except main.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      # Download this repo's code onto the runner.
+      - uses: actions/checkout@v4
+
+      # Swap GitHub's identity token for a short-lived Google credential.
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # So docker push can log in
+      - run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      # Tag with the commit SHA, so every revision traces back to a commit.
+      # No --platform flag: GitHub's runners are already Intel/AMD.
+      - run: |
+          docker build -f apps/api/Dockerfile -t $IMAGE/api:${{ github.sha }} .
+          docker push $IMAGE/api:${{ github.sha }}
+
+      # Only --image: everything else (env vars, secrets, limits) carries over from the last revision.
+      - run: gcloud run deploy visualize-api --image=$IMAGE/api:${{ github.sha }} --region=${{ vars.GCP_REGION }}
+
+  deploy-web:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.WIF_PROVIDER }}
+          service_account: ${{ vars.DEPLOYER_SA }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker ${{ vars.GCP_REGION }}-docker.pkg.dev --quiet
+
+      # The API's URL is baked into the browser code at build time, so it goes in here.
+      - run: |
+          docker build -f apps/web/Dockerfile \
+            --build-arg NEXT_PUBLIC_API_URL=${{ vars.API_URL }} \
+            -t $IMAGE/web:${{ github.sha }} .
+          docker push $IMAGE/web:${{ github.sha }}
+
+      - run: gcloud run deploy visualize-web --image=$IMAGE/web:${{ github.sha }} --region=${{ vars.GCP_REGION }}
