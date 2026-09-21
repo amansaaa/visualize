@@ -13,6 +13,9 @@ RUN pnpm install --frozen-lockfile --filter @visualize/web...
 COPY packages/shared packages/shared
 COPY packages/db packages/db
 COPY apps/web apps/web
+# Git doesn't track empty folders, so a fresh clone (CI) has no public/ while this repo's is empty.
+# Make sure it exists so the final stage's COPY of it can't fail.
+RUN mkdir -p apps/web/public
 
 # NEXT_PUBLIC_* values are inlined into the browser bundle at build time, so the API's URL must be
 # known here; changing it later means rebuilding this image.
