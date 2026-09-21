@@ -136,10 +136,23 @@ export async function runCompose(
 ): Promise<ComposeResult> {
   emit({ type: "stepStarted", step: "compose" });
 
-  let attempt = await attemptCompose(prompt, rows, priorSpec, undefined, signal);
-  let reason = checkChartTypeFits(attempt.spec.type, rows);
+  // An attempt can fail two ways, and one retry covers both: generateObject
+  // throws when the model's spec doesn't match chartSpecSchema, and
+  // checkChartTypeFits rejects a spec that is valid but wrong for this data.
+  let attempt: ComposeResult;
+  let retried = false;
 
-  if (reason) {
+  try {
+    attempt = await attemptCompose(prompt, rows, priorSpec, undefined, signal);
+  } catch {
+    // A second schema failure propagates: the orchestrator turns it into an
+    // error event and saves nothing ("validation fails twice" in CLAUDE.md).
+    attempt = await attemptCompose(prompt, rows, priorSpec, "that chart spec was not valid", signal);
+    retried = true;
+  }
+
+  let reason = checkChartTypeFits(attempt.spec.type, rows);
+  if (reason && !retried) {
     attempt = await attemptCompose(prompt, rows, priorSpec, reason, signal);
     reason = checkChartTypeFits(attempt.spec.type, rows);
   }
