@@ -1,6 +1,7 @@
 # Visualize
 
 ![Feed view](docs/screenshots/feed.png)
+
 ![Workspace view](docs/screenshots/workspace.png)
 
 Pinterest for data visualization. An agent pipeline researches your query live on the web, picks the way to visualize the data, and renders an aesthetic visualization. The user can publish it to a public masonry feed on the homepage.
