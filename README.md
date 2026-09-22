@@ -1,34 +1,85 @@
 # Visualize
 
-TLDR: Type in a data related query (i.e top 10 streamed songs on Dec 12, 2017). An agent pipeline researches it on the live web, picks the way to visualize the data, and renders an aesthetic visualization. The user can publish it to a public masonry feed on the homepage (no social-media integration).
+![Feed view](docs/screenshots/feed.png)
+![Workspace view](docs/screenshots/workspace.png)
 
-# Background
+Pinterest for data visualization. An agent pipeline researches your query live on the web, picks the way to visualize the data, and renders an aesthetic visualization. The user can publish it to a public masonry feed on the homepage.
 
-Usually I go down random data rabbit holes (i.e what were the top 10 streamed songs on Spotify on Dec 12, 2017, or what were the cost of groceries when I was born?). 
+Try it now: https://vvisualize.app/
 
-Not just are these random facts, but they also expose patterns about society (i.e inflation, why songs are getting shorter overtime, why the most expensive cappuccino is in Copenhagen while its rent costs less than US). You can’t just see a spreadsheet, actually have to see what is going on.
+## How It Works
 
-Hence, I built Visualize (Pinterest for data visualization) where you can go and literally type anything you want to see a data visual of. 
+1. **Ask:** Type a vague question into the compose bar
+2. **Search:** The agent plans 2-3 targeted queries and runs them against the live web via Tavily Search API, streaming each query and its sources in real time to you
+3. **Consolidate:** An LLM extracts the results into a strict Zod schema containing field names, real numbers, cited sources
+4. **Compose:** The agent picks the chart form that best fits the data (bar, lollipop, line, donut, treemap, etc...) writes the spec, title and description, and renders a chart
+5. **Iterate:** Ask a follow-up (the pipeline decides whether to re-search for new data or just re-compose)
+6. **Publish:** One click sends the visualization to the public masonry feed
 
-The agent will search and get the data, and then find the best way to present it to you. Then it creates a very nice data visualization which then can share it to a public feed (i.e on social media or to the homepage of the website).
+## Quick Start
 
-# Four components:
+### Prerequisites
+
+- Node.js 20+
+- pnpm 9+
+- Docker (for local Postgres)
+- API keys for Gemini and Tavily
+
+### Setup
+
+```bash
+pnpm install
+```
+
+```bash
+cp .env.example .env
+```
+
+```bash
+pnpm db:up && pnpm db:migrate
+```
+
+```bash
+pnpm dev
+```
+
+Web runs on `localhost:3000`, the API on `localhost:4000`. Optionally run `pnpm seed` to fill the feed with real generated examples.
+
+## Architecture
+
+Four main components:
+
 1. Research & data pipeline
 2. Visualization & specification engine
-3. Real-Time Streaming Architecture
-4. Persistence & Feed
+3. Real-time streaming architecture
+4. Persistence & feed
 
-# Tech Stack
+### Web (`apps/web`)
 
-**Web**: Next.js (App Router) + TypeScript + Tailwind CSS
+- **Next.js & React:** feed, compose and streaming modals, workspace, detail modal
+- **Tailwind CSS:** styling built on ~12 fixed card themes
+- **visx / d3:** React components that render each chart type from a validated spec
+- **react-masonry-css:** masonry feed (5 columns down to 1 depending on screen width)
+- **Server Actions:** publish sends only the row id
 
-**API**: Node.js/Express server (agent runs exceed serverless timeouts and hold a streaming connection)
+### API (`apps/api`)
 
-**DB**: PostgreSQL + Drizzle ORM. Local dev: Postgres in Docker (docker-compose). Deploy: GCP
+- **Express:** runs long enough for a full agent run and keeps the stream open
+- **Vercel AI SDK + Gemini Flash:** model id comes from env to quickly switch models if quota reached
+- **Tavily Search:** the web searches generated from user's query
+- **SSE (Server-Sent Events):** streams SEARCH → CONSOLIDATE → COMPOSE as they happen; closing the tab aborts the run
+- **Zod:** checks the extracted rows and the chart spec before anything is saved
+- **express-rate-limit:** 10 generations an hour per IP
 
-**AI/data**: Vercel AI SDK + Gemini Flash (@ai-sdk/google, free tier), Tavily Search API, Zod for schema validation
+### Shared & Data
 
-**Charts**: visx / D3.js (d3-scale, d3-shape, d3-hierarchy, d3-geo + us-atlas)
+- **`packages/shared`:** the Zod schemas both apps use (chart specs, stream events, data rows)
+- **`packages/db`:** Drizzle over Postgres, one `visualizations` table with a partial index for the feed
+- **Docker Compose:** Postgres for local dev; only `DATABASE_URL` differs in production
 
-# Structure
+### Infrastructure
 
+- **GCP Cloud Run:** one service per app
+- **Cloud SQL (Postgres 17):** no public IP (connected over an unix socket)
+- **Secret Manager:** database URL and API keys
+- **GitHub Actions:** typecheck and build on every PR, then build and deploy on merge to `main`
