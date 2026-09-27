@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- Page background (color-page) with the wordmark lowercase Anton "v" in color-ink. -->
+  <rect width="100" height="100" rx="22" fill="#0b0b0b"/>
+  <path transform="translate(31.75 79) scale(0.03867 -0.03867)" fill="#e8e8e4" d="M263 0 22 1500H381L467 498L564 1500H922L677 0Z"/>
+</svg>
